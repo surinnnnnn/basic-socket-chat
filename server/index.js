@@ -6,6 +6,7 @@ import { dirname } from "path";
 import cors from "cors";
 import * as path from "node:path";
 import { timeStamp } from "console";
+import { prisma } from "./init/prisma_client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,7 +29,7 @@ io.on("connection", (socket) => {
           sender: socket.id,
           timeStamp: new Date(),
      });
-     socket.on("SEND_MESSAGE", (msg) => {
+     socket.on("SEND_MESSAGE", async (msg) => {
           //메세지 객체 처리
 
           const msgObj = {
@@ -37,6 +38,14 @@ io.on("connection", (socket) => {
                sender: socket.id,
                timeStamp: new Date(),
           };
+          await prisma.chat.create({
+               data: {
+                    socket_id: msgObj.socketId,
+                    chat: msgObj.content,
+                    sender: msgObj.sender,
+                    timestamp: msgObj.timeStamp,
+               },
+          });
 
           console.log(msgObj);
 
@@ -50,8 +59,13 @@ io.on("connection", (socket) => {
 });
 
 app.use(express.static(path.join(path.resolve(), "public")));
-app.get("/*", (req, res) => {
+app.get("/", (req, res) => {
      res.sendFile(path.join(path.resolve(), "public", "index.html"));
+});
+
+app.get("/messages", async (req, res) => {
+     const messages = await prisma.chat.findMany();
+     res.status(200).json({ messages });
 });
 
 const PORT = 4000;
