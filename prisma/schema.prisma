@@ -19,5 +19,5 @@ model chat {
   socket_id   String
   chat        String 
   sender      String 
-  timestamp   DateTime
+  timestamp   String
 }

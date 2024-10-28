@@ -21,36 +21,66 @@ const io = new Server(httpServer, {
      },
 });
 
+const usersInRooms = {};
+
 io.on("connection", (socket) => {
      console.log("사용자가 연결되었습니다", socket.id);
-     socket.broadcast.emit("SEND_MESSAGE", {
-          socketId: socket.id + Math.random(),
-          content: "새로운 사용자가 입장했습니다.",
-          sender: socket.id,
-          timeStamp: new Date(),
-     });
+
      socket.on("SEND_MESSAGE", async (msg) => {
-          //메세지 객체 처리
+          const room = usersInRooms[socket.id];
 
+          if (room) {
+               const msgObj = {
+                    id: socket.id + Math.random(),
+                    content: msg.message,
+                    sender: socket.id,
+                    timestamp: new Date().toLocaleString(),
+               };
+               io.to(room).emit("SEND_MESSAGE", JSON.stringify(msgObj));
+               await prisma.chat.create({
+                    data: {
+                         socket_id: msgObj.id,
+                         chat: msgObj.content,
+                         sender: msgObj.sender,
+                         timestamp: msgObj.timestamp,
+                    },
+               });
+          } else {
+               const msgObj = {
+                    id: socket.id + Math.random(),
+                    content: msg.message,
+                    sender: socket.id,
+                    timestamp: new Date().toLocaleString(),
+               };
+               socket.emit("SEND_MESSAGE", JSON.stringify(msgObj));
+          }
+     });
+
+     socket.on("JOIN_ROOM", (room) => {
+          socket.join(room);
+          if (!usersInRooms[socket.id]) {
+               const msgObj = {
+                    id: socket.id + Math.random(),
+                    content: "새로운 사용자가 입장했습니다.",
+                    sender: socket.id,
+                    timestamp: new Date().toLocaleString(),
+               };
+               io.to(room).emit("SEND_MESSAGE", JSON.stringify(msgObj));
+          }
+          // 사용자 입장 메시지 한번만
+          usersInRooms[socket.id] = room;
+     });
+
+     socket.on("LEAVE_ROOM", (room) => {
+          socket.leave(room);
+          delete usersInRooms[socket.id];
           const msgObj = {
-               socketId: socket.id + Math.random(),
-               content: msg,
+               id: socket.id + Math.random(),
+               content: "사용자가 채팅룸을 떠났습니다.",
                sender: socket.id,
-               timeStamp: new Date(),
+               timestamp: new Date().toLocaleString(),
           };
-          await prisma.chat.create({
-               data: {
-                    socket_id: msgObj.socketId,
-                    chat: msgObj.content,
-                    sender: msgObj.sender,
-                    timestamp: msgObj.timeStamp,
-               },
-          });
-
-          console.log(msgObj);
-
-          //브로드 캐스트
-          io.emit("SEND_MESSAGE", msgObj);
+          io.to(room).emit("SEND_MESSAGE", JSON.stringify(msgObj));
      });
 
      socket.on("disconnect", () => {
